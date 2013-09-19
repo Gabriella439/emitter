@@ -1,0 +1,4 @@
+emitter
+=======
+
+haskell pipes example
