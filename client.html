@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WebSocket</title>
+    <script type="text/JavaScript"
+            src="http://code.jquery.com/jquery-1.6.3.min.js"></script>
+    <script src="lib/d3.min.js"></script>
+    <script src="lib/d3.layout.min.js"></script>
+    <script src="lib/rickshaw.min.js"></script>
+    <link href="http://netdna.bootstrapcdn.com/font-awesome/3.2.1/css/font-awesome.css" rel="stylesheet">
+    <script type="text/JavaScript" src="client.js"></script>
+    <link rel="stylesheet" type="text/css" href="lib/rickshaw.min.css" />
+    <link rel="stylesheet" type="text/css" href="client.css" />
+  </head>
+  <body>
+    <h2>Emitter</h2>
+    <div id="main">
+      Server <i id="spinner" class="icon-spinner icon-large"></i>
+      <br>
+      <input id = "btnGo" type="submit" value="Go">
+      <input id = "btnStop" type="submit" value="Stop">
+      <input id = "btnQuit" type="submit" value="Quit">
+      <br>maxTake <input id = "paramMaxTake" type="number" name="max stream" min="1" max="10000" value="1000">
+      <br>delay <input id = "paramDelay" type="range" name="delay" min="0" max="10" step="0.1" value = "1.0">
+      <input id = "textDelay" type="text" value="1.0">
+      <br>start <input id = "paramStart" type="range" name="start" min="-100" max="100" step="1" value = "0">
+      <input id = "textStart" type="text" value="0">
+      <br>drift <input id = "paramDrift" type="range" name="drift" min="-1" max="1" step="0.1" value = "0">
+      <input id = "textDrift" type="text" value="0">
+      <br>sigma <input id = "paramSigma" type="range" name="sigma" min="0" max="100" step="0.01" value = "1">
+      <input id = "textSigma" type="text" value="1">
+      <br>dt    <input id = "paramDt" type="range" name="dt" min="0.01" max="100" step="0.01" value = "1">
+      <input id = "textDt" type="text" value="1">
+      <br>ema1    <input id = "paramEma1" type="range" name="ema1" min="0" max="1" step="0.01" value = "0">
+      <input id = "textEma1" type="text" value="0">
+      <br>ema2    <input id = "paramEma2" type="range" name="ema2" min="0" max="1" step="0.01" value = "0.5">
+      <input id = "textEma2" type="text" value="0.5">
+      <br>
+      <div id="stream-section">
+        <h2>Incoming Stream</h2>
+        <div id="stream">
+        </div>
+      </div>
+      <div id="chart_container">
+        <div id="y_axis"></div>
+        <div id="chart"></div>
+      </div>
+    </div>
+  </body>
+</html>
