@@ -1,0 +1,31 @@
+name:                     emitter
+version:                  0.1
+synopsis:                 pipes example
+license:                  OtherLicense
+license-file:             LICENSE
+author:                   Tony Day
+maintainer:               tonyday567@gmail.com
+category:                 Test
+build-type:               Simple
+stability:                Experimental
+cabal-version:            >= 1.10
+extra-source-files:       Readme.md
+description:              The emitter sets up a random walk pipes stream, listens for stdin and browser effects, and streams the result to a rickshaw chart.
+source-repository         head
+  type:                   git
+  location:               git://github.com/tonyday567/emitter.git
+ 
+executable emitter-server
+  main-is:                emitter-server.hs
+  default-language:       Haskell2010
+  ghc-options:            -Wall -O2 -threaded
+  hs-source-dirs:         src
+  build-depends:          base >= 4 && < 5
+                        , pipes >= 4.0.0
+                        , pipes-concurrency >= 2.0.0
+                        , websockets >= 0.7.4.0
+                        , text >= 0.11.3.1
+                        , normaldistribution >= 1.1.0.3
+                        , foldl >= 1.0.0
+                        , stm >= 2.4.2
+                        , async >= 2.0.1.4
