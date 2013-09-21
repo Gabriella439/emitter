@@ -24,7 +24,7 @@ executable emitter-server
                         , pipes >= 4.0.0
                         , pipes-concurrency >= 2.0.0
                         , websockets >= 0.7.4.0
-                        , text >= 0.11.3.1
+                        , text >= 0.11.2.0
                         , normaldistribution >= 1.1.0.3
                         , foldl >= 1.0.0
                         , stm >= 2.4.2
