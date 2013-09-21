@@ -171,7 +171,7 @@ fromWs o rq = do
     WS.acceptRequest rq
     logger "accepted incoming request"
     WS.sendTextData $ T.pack "server accepted incoming connection"
-    runEffect $ wsMessage >-> hoist liftIO (toOutput o)
+    runEffect $ wsMessage >-> toOutput o
 
 wsMessage :: Producer Message (WS.WebSockets WS.Hybi00) ()
 wsMessage = forever $ do
@@ -192,7 +192,7 @@ toWs :: Input Stream
 toWs i rq = do
     WS.acceptRequest rq
     logger "accepted stream request"
-    runEffect $ hoist liftIO (fromInput i) >-> wsSend
+    runEffect $ fromInput i >-> wsSend
 
 -- send text to ws
 wsSend :: Consumer Stream (WS.WebSockets WS.Hybi00) ()
