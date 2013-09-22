@@ -170,6 +170,7 @@ responses = do
             Stream str -> send os str
             _          -> return True
 
+-- The input generates ticks and the output lets you Set or UnSet ticks
 ticks :: IO (Input (), Output EventOut)
 ticks = do
     (oTick, iTick) <- spawn Unbounded
@@ -198,6 +199,7 @@ fromList as = do
     link a
     return i
 
+-- All the pure logic.  Note that none of these use 'IO'
 updateParams :: (Monad m) => Param -> S.StateT Params m ()
 updateParams p = do
     ps <- S.get
@@ -236,15 +238,6 @@ scan = Edge $ \a -> do
     case (,) <$> ema (ema1 ps) <*> ema (ema2 ps) of
         L.Fold step begin done -> push a >-> P.scan step begin done
 
-toOutput' :: (MonadIO m) => Output a -> Edge m () a x
-toOutput' o = Edge go
-  where
-    go a = do
-        alive <- liftIO $ atomically $ send o a
-        when alive $ do
-            a2 <- await
-            go a2
-
 dataHandler :: (Monad m) => Edge (S.StateT Params m) () Double EventOut
 dataHandler =
         walker
@@ -277,13 +270,17 @@ main = do
     inCmd  <- user
     outWeb <- responses
     (inTick, outChange) <- ticks
-    theData <- fromList (mkNormals seed)
-    let inData= (\_ a -> Data a) <$> inTick <*> theData
+    randomValues <- fromList (mkNormals seed)
+    -- Space the random values according to the ticks
+    let inData= (\_ a -> Data a) <$> inTick <*> randomValues
 
-    let p = await >>= unEdge total
+    -- 'totalPipe' is the pure kernel of business logic
+    let totalPipe = await >>= unEdge total
+
+    -- Go!
     (`S.evalStateT` defaultParams) $ runEffect $
             fromInput (inWeb <> inCmd <> inData)
-        >-> p
+        >-> totalPipe
         >-> toOutput (outWeb <> outChange)
 
 -- exponential moving average
