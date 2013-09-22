@@ -2,23 +2,25 @@
 
 module Main where
 
-import           Control.Applicative
-import           Control.Arrow
+import           Control.Applicative ((<$>), (<*>))
+import           Control.Arrow ((>>>), arr)
 import           Control.Concurrent (threadDelay)
 import           Control.Concurrent.Async (async, link)
-import           Control.Concurrent.STM
+import           Control.Concurrent.STM (newTVarIO, readTVar, writeTVar, retry)
 import qualified Control.Foldl as L
-import           Control.Monad (forever, when, unless)
-import           Control.Monad.Trans.State.Strict
+import           Control.Monad (when, unless)
+import           Control.Monad.IO.Class (MonadIO(liftIO))
+import qualified Control.Monad.Trans.State.Strict as S
+import           Control.Monad.Trans.Class (lift)
 import           Data.Monoid ((<>))
 import           Data.Random.Normal (mkNormals)
 import qualified Data.Text as T
 
 import qualified Network.WebSockets as WS
 
-import           Pipes
-import           Pipes.Arrow
-import           Pipes.Core (push, (/>/))
+import           Pipes ((>->), (~>), for, (>~), await, yield, runEffect, each)
+import           Pipes.Arrow (Edge(Edge, unEdge))
+import           Pipes.Core (push)
 import           Pipes.Concurrent
 import qualified Pipes.Prelude as P
 
@@ -46,7 +48,7 @@ data Param
     | Dt      Double
     | Ema1    Double
     | Ema2    Double
-    deriving (Show, Eq)
+    deriving (Show)
 
 data Params = Params
     { delay   :: Double
@@ -71,14 +73,11 @@ defaultParams = Params
     , ema2    = 0.5  -- ema parameter
     }
 
-data ButtonIn = Quit | Stop | Go
-    deriving (Show)
+data ButtonIn = Quit | Stop | Go deriving (Show)
 
-data EventIn = Data Double | ButtonIn ButtonIn | Param Param
-    deriving (Show)
+data EventIn = Data Double | ButtonIn ButtonIn | Param Param deriving (Show)
 
-data EventOut = Set Double | UnSet | Stream String
-    deriving (Show)
+data EventOut = Set Double | UnSet | Stream String deriving (Show)
 
 -- Controllers and Views
 help :: IO ()
@@ -136,6 +135,7 @@ makeEvent x      = case words x of
     ["Dt"     , xs] -> Param $ Dt      $ read xs
     ["Ema1"   , xs] -> Param $ Ema1    $ read xs
     ["Ema2"   , xs] -> Param $ Ema2    $ read xs
+    _               -> ButtonIn Stop  -- Why not?
 
 wsEvent :: WS.WebSockets WS.Hybi00 EventIn
 wsEvent = do
@@ -170,8 +170,8 @@ responses = do
             Stream str -> send os str
             _          -> return True
 
-frames :: IO (Input (), Output EventOut)
-frames = do
+ticks :: IO (Input (), Output EventOut)
+ticks = do
     (oTick, iTick) <- spawn Unbounded
     tvar   <- newTVarIO Nothing
     let pause = do
@@ -198,9 +198,9 @@ fromList as = do
     link a
     return i
 
-updateParams :: (Monad m) => Param -> StateT Params m ()
+updateParams :: (Monad m) => Param -> S.StateT Params m ()
 updateParams p = do
-    ps <- get
+    ps <- S.get
     let ps' = case p of
             Delay   p' -> ps { delay   = p' }
             MaxTake p' -> ps { maxTake = p' }
@@ -210,29 +210,29 @@ updateParams p = do
             Dt      p' -> ps { dt      = p' }
             Ema1    p' -> ps { ema1    = p' }
             Ema2    p' -> ps { ema2    = p' }
-    put ps'
+    S.put ps'
 
-takeMax :: (Monad m) => Edge (StateT Params m) () a a
+takeMax :: (Monad m) => Edge (S.StateT Params m) () a a
 takeMax = Edge (takeLoop 0)
   where
     takeLoop count a = do
-        m <- lift $ gets maxTake
+        m <- lift $ S.gets maxTake
         unless (count >= m) $ do
             yield a
-            a <- await
-            takeLoop (count + 1) a
+            a2 <- await
+            takeLoop (count + 1) a2
 
 -- turns a random stream into a random walk stream
-walker :: (Monad m) => Edge (StateT Params m) () Double Double
-walker = Edge $ push />/ \a -> do
-    ps <- lift get
+walker :: (Monad m) => Edge (S.StateT Params m) () Double Double
+walker = Edge $ push ~> \a -> do
+    ps <- lift S.get
     let st = start ps + drift ps * dt ps + sigma ps * sqrt (dt ps) * a
     lift $ updateParams (Start st)
     yield st
 
-scan :: (Monad m) => Edge (StateT Params m) r Double (Double, Double)
+scan :: (Monad m) => Edge (S.StateT Params m) r Double (Double, Double)
 scan = Edge $ \a -> do
-    ps <- lift get
+    ps <- lift S.get
     case (,) <$> ema (ema1 ps) <*> ema (ema2 ps) of
         L.Fold step begin done -> push a >-> P.scan step begin done
 
@@ -245,25 +245,25 @@ toOutput' o = Edge go
             a2 <- await
             go a2
 
-dataHandler :: (Monad m) => Edge (StateT Params m) () Double EventOut
+dataHandler :: (Monad m) => Edge (S.StateT Params m) () Double EventOut
 dataHandler =
         walker
     >>> takeMax
     >>> scan
     >>> arr (Stream . show)
 
-buttonHandler :: (Monad m) => Edge (StateT Params m) () ButtonIn EventOut
-buttonHandler = Edge $ push />/ \b -> case b of
+buttonHandler :: (Monad m) => Edge (S.StateT Params m) () ButtonIn EventOut
+buttonHandler = Edge $ push ~> \b -> case b of
     Quit -> return ()
     Stop -> yield UnSet
     Go   -> do
-        ps <- lift get
+        ps <- lift S.get
         yield $ Set (delay ps)
     
-paramHandler :: (Monad m) => Edge (StateT Params m) () Param x
-paramHandler = Edge $ push />/ (lift . updateParams)
+paramHandler :: (Monad m) => Edge (S.StateT Params m) () Param x
+paramHandler = Edge $ push ~> (lift . updateParams)
 
-total :: (Monad m) => Edge (StateT Params m) () EventIn EventOut
+total :: (Monad m) => Edge (S.StateT Params m) () EventIn EventOut
 total = proc e -> do
     case e of
         Data x     -> dataHandler   -< x
@@ -276,12 +276,12 @@ main = do
     inWeb  <- websocket
     inCmd  <- user
     outWeb <- responses
-    (inTick, outChange) <- frames
-    theData <- fromList [1..]
+    (inTick, outChange) <- ticks
+    theData <- fromList (mkNormals seed)
     let inData= (\_ a -> Data a) <$> inTick <*> theData
 
     let p = await >>= unEdge total
-    (`evalStateT` defaultParams) $ runEffect $
+    (`S.evalStateT` defaultParams) $ runEffect $
             fromInput (inWeb <> inCmd <> inData)
         >-> p
         >-> toOutput (outWeb <> outChange)
